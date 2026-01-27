@@ -1,0 +1,103 @@
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# .NET
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Visual Studio
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+*.cache
+*.vspscc
+*.vssscc
+*.pidb
+*.svclog
+*.scc
+
+# Rider
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/
+
+# MonoDevelop/Xamarin Studio
+*.userprefs
+
+# Build results of an ideAl: Add project specific ignore patterns
+*.VisualState.xml
+TestResult.xml
+nunit-*.xml
+
+# NuGet
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+!**/[Pp]ackages/repositories.config
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+*~
+.fuse_hidden*
+.nfs*
+
+# Avalonia
+*.avares.json
+
+# User-specific files
+*.rsuser
+*.pubxml
+*.publishproj
+
+# Publish output
+publish/
+PublishOutput/
+
+# dotnet tool restore
+.config/dotnet-tools.json
+
+# Local environment
+*.local
+.env
+.env.*
+
+# Test results
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# Crash dumps
+*.stackdump
+crash.log
