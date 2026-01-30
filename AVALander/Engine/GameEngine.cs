@@ -196,9 +196,13 @@ public class GameEngine : IDisposable
             Lander.Thrust(deltaTime);
             Sound.PlayThruster();
         }
-        else if (_wasThrustingLastFrame)
+        else
         {
-            Sound.StopThruster();
+            if (_wasThrustingLastFrame)
+            {
+                Sound.StopThruster();
+                Lander.ResetThrottle();
+            }
         }
         _wasThrustingLastFrame = Input.IsThrusting && Lander.Fuel > 0;
 

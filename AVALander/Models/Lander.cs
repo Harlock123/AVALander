@@ -7,16 +7,21 @@ public class Lander : GameObject
 {
     public const double RotationSpeed = 2.5;
     public const double ThrustPower = 120.0;
-    public const double Gravity = 40.0;
+    public const double Gravity = 24.0;
     public const double MaxFuel = 1000.0;
     public const double FuelConsumption = 50.0;
     public const double MaxSafeLandingSpeed = 40.0;
     public const double MaxSafeLandingAngle = 15.0; // degrees from vertical
 
+    // Throttle ramp-up settings
+    public const double MinThrottle = 0.2;
+    public const double ThrottleRampUpTime = 0.7; // seconds to reach full throttle
+
     public double Fuel { get; private set; }
     public bool IsThrusting { get; set; }
     public bool HasLanded { get; private set; }
     public bool HasCrashed { get; private set; }
+    public double ThrottleLevel { get; private set; } = MinThrottle;
 
     private const double LanderWidth = 30;
     private const double LanderHeight = 25;
@@ -45,16 +50,21 @@ public class Lander : GameObject
 
         IsThrusting = true;
 
+        // Ramp up throttle over time
+        double rampRate = (1.0 - MinThrottle) / ThrottleRampUpTime;
+        ThrottleLevel = Math.Min(1.0, ThrottleLevel + rampRate * deltaTime);
+
         // Thrust direction is opposite to the rotation (pushing against gravity)
         // Rotation 0 = pointing up, so thrust is upward
         double thrustAngle = Rotation - Math.PI / 2;
+        double effectiveThrust = ThrustPower * ThrottleLevel;
         var thrustVector = new Vector(
-            Math.Cos(thrustAngle) * ThrustPower * deltaTime,
-            Math.Sin(thrustAngle) * ThrustPower * deltaTime
+            Math.Cos(thrustAngle) * effectiveThrust * deltaTime,
+            Math.Sin(thrustAngle) * effectiveThrust * deltaTime
         );
 
         Velocity += thrustVector;
-        Fuel -= FuelConsumption * deltaTime;
+        Fuel -= FuelConsumption * ThrottleLevel * deltaTime;
         if (Fuel < 0) Fuel = 0;
     }
 
@@ -86,6 +96,11 @@ public class Lander : GameObject
         IsThrusting = false;
     }
 
+    public void ResetThrottle()
+    {
+        ThrottleLevel = MinThrottle;
+    }
+
     public void Land()
     {
         HasLanded = true;
@@ -107,6 +122,7 @@ public class Lander : GameObject
         HasLanded = false;
         HasCrashed = false;
         IsThrusting = false;
+        ThrottleLevel = MinThrottle;
     }
 
     public double GetSpeed()
@@ -142,44 +158,78 @@ public class Lander : GameObject
 
     public override Point[] GetPolygonPoints()
     {
-        var points = new Point[8];
+        // Main body outline - Apollo LM style ascent stage
+        var points = new Point[12];
         double cos = Math.Cos(Rotation);
         double sin = Math.Sin(Rotation);
 
-        // Lander body (hexagon-ish shape)
-        // Top point
-        points[0] = TransformPoint(0, -12, cos, sin);
-        // Upper right
-        points[1] = TransformPoint(8, -6, cos, sin);
-        // Lower right body
-        points[2] = TransformPoint(10, 4, cos, sin);
-        // Right leg
-        points[3] = TransformPoint(14, 12, cos, sin);
-        // Left leg
-        points[4] = TransformPoint(-14, 12, cos, sin);
-        // Lower left body
-        points[5] = TransformPoint(-10, 4, cos, sin);
-        // Upper left
-        points[6] = TransformPoint(-8, -6, cos, sin);
-        // Back to top
-        points[7] = TransformPoint(0, -12, cos, sin);
+        // Ascent stage cabin (boxy shape with angled top)
+        points[0] = TransformPoint(-4, -16, cos, sin);   // Top left of cabin
+        points[1] = TransformPoint(4, -16, cos, sin);    // Top right of cabin
+        points[2] = TransformPoint(8, -12, cos, sin);    // Upper right corner
+        points[3] = TransformPoint(8, -4, cos, sin);     // Right side of cabin
+        points[4] = TransformPoint(12, 0, cos, sin);     // Right side descent stage top
+        points[5] = TransformPoint(12, 6, cos, sin);     // Right side descent stage bottom
+        points[6] = TransformPoint(6, 8, cos, sin);      // Bottom right
+        points[7] = TransformPoint(-6, 8, cos, sin);     // Bottom left
+        points[8] = TransformPoint(-12, 6, cos, sin);    // Left side descent stage bottom
+        points[9] = TransformPoint(-12, 0, cos, sin);    // Left side descent stage top
+        points[10] = TransformPoint(-8, -4, cos, sin);   // Left side of cabin
+        points[11] = TransformPoint(-8, -12, cos, sin);  // Upper left corner
+
+        return points;
+    }
+
+    public Point[] GetCabinWindowPoints()
+    {
+        // Triangular window on the ascent stage
+        var points = new Point[3];
+        double cos = Math.Cos(Rotation);
+        double sin = Math.Sin(Rotation);
+
+        points[0] = TransformPoint(0, -14, cos, sin);    // Top of window
+        points[1] = TransformPoint(-4, -8, cos, sin);    // Bottom left
+        points[2] = TransformPoint(4, -8, cos, sin);     // Bottom right
 
         return points;
     }
 
     public Point[] GetLegPoints()
     {
-        var points = new Point[4];
+        // Four landing legs with footpads - returns pairs of points for each leg segment
+        var points = new Point[16];
         double cos = Math.Cos(Rotation);
         double sin = Math.Sin(Rotation);
 
-        // Left leg
+        // Left leg - strut from body
         points[0] = TransformPoint(-10, 4, cos, sin);
-        points[1] = TransformPoint(-14, 12, cos, sin);
+        points[1] = TransformPoint(-18, 14, cos, sin);
+        // Left leg - footpad
+        points[2] = TransformPoint(-20, 14, cos, sin);
+        points[3] = TransformPoint(-16, 14, cos, sin);
 
-        // Right leg
-        points[2] = TransformPoint(10, 4, cos, sin);
-        points[3] = TransformPoint(14, 12, cos, sin);
+        // Right leg - strut from body
+        points[4] = TransformPoint(10, 4, cos, sin);
+        points[5] = TransformPoint(18, 14, cos, sin);
+        // Right leg - footpad
+        points[6] = TransformPoint(16, 14, cos, sin);
+        points[7] = TransformPoint(20, 14, cos, sin);
+
+        // Secondary struts (inner supports)
+        // Left inner strut
+        points[8] = TransformPoint(-6, 8, cos, sin);
+        points[9] = TransformPoint(-18, 14, cos, sin);
+        // Right inner strut
+        points[10] = TransformPoint(6, 8, cos, sin);
+        points[11] = TransformPoint(18, 14, cos, sin);
+
+        // Cross braces
+        // Left cross brace
+        points[12] = TransformPoint(-12, 6, cos, sin);
+        points[13] = TransformPoint(-14, 10, cos, sin);
+        // Right cross brace
+        points[14] = TransformPoint(12, 6, cos, sin);
+        points[15] = TransformPoint(14, 10, cos, sin);
 
         return points;
     }
@@ -194,15 +244,17 @@ public class Lander : GameObject
         double cos = Math.Cos(Rotation);
         double sin = Math.Sin(Rotation);
 
-        // Flickering flame length based on time
-        double flicker = 15 + FlameRandom.NextDouble() * 15;
+        // Flickering flame length based on time and throttle level
+        double baseFlicker = 15 + FlameRandom.NextDouble() * 15;
+        double flicker = baseFlicker * ThrottleLevel;
+        double width = 7 * ThrottleLevel;
 
         // Main flame triangle with inner detail
-        points[0] = TransformPoint(-7, 8, cos, sin);
-        points[1] = TransformPoint(-3, 8 + flicker * 0.6, cos, sin);
+        points[0] = TransformPoint(-width, 8, cos, sin);
+        points[1] = TransformPoint(-width * 0.43, 8 + flicker * 0.6, cos, sin);
         points[2] = TransformPoint(0, 8 + flicker, cos, sin);
-        points[3] = TransformPoint(3, 8 + flicker * 0.6, cos, sin);
-        points[4] = TransformPoint(7, 8, cos, sin);
+        points[3] = TransformPoint(width * 0.43, 8 + flicker * 0.6, cos, sin);
+        points[4] = TransformPoint(width, 8, cos, sin);
 
         return points;
     }
@@ -215,11 +267,13 @@ public class Lander : GameObject
         double cos = Math.Cos(Rotation);
         double sin = Math.Sin(Rotation);
 
-        double flicker = 8 + FlameRandom.NextDouble() * 10;
+        double baseFlicker = 8 + FlameRandom.NextDouble() * 10;
+        double flicker = baseFlicker * ThrottleLevel;
+        double width = 4 * ThrottleLevel;
 
-        points[0] = TransformPoint(-4, 10, cos, sin);
+        points[0] = TransformPoint(-width, 10, cos, sin);
         points[1] = TransformPoint(0, 10 + flicker, cos, sin);
-        points[2] = TransformPoint(4, 10, cos, sin);
+        points[2] = TransformPoint(width, 10, cos, sin);
 
         return points;
     }
@@ -237,9 +291,10 @@ public class Lander : GameObject
         double cos = Math.Cos(Rotation);
         double sin = Math.Sin(Rotation);
 
+        // Match the new leg footpad positions
         return (
-            TransformPoint(-14, 12, cos, sin),
-            TransformPoint(14, 12, cos, sin)
+            TransformPoint(-18, 14, cos, sin),
+            TransformPoint(18, 14, cos, sin)
         );
     }
 }

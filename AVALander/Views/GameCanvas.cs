@@ -16,6 +16,14 @@ public class GameCanvas : Control
     private bool _wasPausePressed;
     private bool _wasBackPressed;
 
+    // Zoom settings
+    private const double ZoomStartAltitude = 200.0;  // Start zooming when below this altitude
+    private const double ZoomMaxAltitude = 50.0;     // Full zoom when at or below this altitude
+    private const double MaxZoomLevel = 2.5;         // Maximum zoom multiplier
+    private double _currentZoom = 1.0;
+    private double _targetZoom = 1.0;
+    private const double ZoomSmoothSpeed = 3.0;      // How fast zoom transitions
+
     private static readonly IPen WhitePen = new Pen(Brushes.White, 2);
     private static readonly IPen ThinWhitePen = new Pen(Brushes.White, 1);
     private static readonly IPen GreenPen = new Pen(Brushes.LimeGreen, 3);
@@ -105,7 +113,43 @@ public class GameCanvas : Control
         HandleControllerPause();
 
         _engine.Update(deltaTime);
+        UpdateZoom(deltaTime);
         InvalidateVisual();
+    }
+
+    private void UpdateZoom(double deltaTime)
+    {
+        // Calculate target zoom based on altitude
+        if (_engine.State == GameState.Playing && !_engine.Lander.HasCrashed && !_engine.Lander.HasLanded)
+        {
+            var (leftFoot, _) = _engine.Lander.GetLandingFeetPositions();
+            double altitude = _engine.Terrain.GetHeightAt(leftFoot.X) - leftFoot.Y;
+            altitude = Math.Max(0, altitude);
+
+            if (altitude < ZoomStartAltitude)
+            {
+                // Interpolate zoom level based on altitude
+                double zoomProgress = 1.0 - (altitude - ZoomMaxAltitude) / (ZoomStartAltitude - ZoomMaxAltitude);
+                zoomProgress = Math.Clamp(zoomProgress, 0.0, 1.0);
+                _targetZoom = 1.0 + (MaxZoomLevel - 1.0) * zoomProgress;
+            }
+            else
+            {
+                _targetZoom = 1.0;
+            }
+        }
+        else if (_engine.State == GameState.Landed || _engine.State == GameState.Crashed)
+        {
+            // Keep current zoom during landing/crash message
+        }
+        else
+        {
+            _targetZoom = 1.0;
+        }
+
+        // Smoothly interpolate current zoom towards target
+        double zoomDiff = _targetZoom - _currentZoom;
+        _currentZoom += zoomDiff * ZoomSmoothSpeed * deltaTime;
     }
 
     private void HandleControllerPause()
@@ -134,9 +178,46 @@ public class GameCanvas : Control
         // Black background (space)
         context.FillRectangle(Brushes.Black, new Rect(0, 0, Bounds.Width, Bounds.Height));
 
-        // Draw stars
+        // Draw stars (unzoomed - they're far away)
         DrawStars(context);
 
+        // Apply zoom transform for game world elements
+        if (_currentZoom > 1.01)
+        {
+            // Calculate zoom center (focused on lander)
+            double centerX = _engine.Lander.Position.X;
+            double centerY = _engine.Lander.Position.Y;
+
+            // Create transform matrix: translate to origin, scale, translate back
+            // This zooms centered on the lander position
+            var transform = Matrix.CreateTranslation(-centerX, -centerY)
+                * Matrix.CreateScale(_currentZoom, _currentZoom)
+                * Matrix.CreateTranslation(centerX, centerY);
+
+            // Offset to keep lander roughly centered on screen when zoomed
+            double offsetX = (Bounds.Width / 2 - centerX) * (_currentZoom - 1) / _currentZoom;
+            double offsetY = (Bounds.Height / 2 - centerY) * (_currentZoom - 1) / _currentZoom;
+            transform = transform * Matrix.CreateTranslation(offsetX, offsetY);
+
+            using (context.PushTransform(transform))
+            {
+                DrawGameWorld(context);
+            }
+        }
+        else
+        {
+            DrawGameWorld(context);
+        }
+
+        // Draw HUD (unzoomed - always on screen)
+        DrawHUD(context);
+
+        // Draw state-specific overlays (unzoomed)
+        DrawOverlays(context);
+    }
+
+    private void DrawGameWorld(DrawingContext context)
+    {
         // Draw terrain
         DrawTerrain(context);
 
@@ -154,12 +235,6 @@ public class GameCanvas : Control
         {
             DrawLander(context);
         }
-
-        // Draw HUD
-        DrawHUD(context);
-
-        // Draw state-specific overlays
-        DrawOverlays(context);
     }
 
     private void DrawStars(DrawingContext context)
@@ -240,10 +315,26 @@ public class GameCanvas : Control
         var landerPoints = _engine.Lander.GetPolygonPoints();
         DrawPolygon(context, landerPoints, WhitePen);
 
-        // Draw legs
+        // Draw cabin window
+        var windowPoints = _engine.Lander.GetCabinWindowPoints();
+        DrawPolygon(context, windowPoints, ThinWhitePen);
+        // Close the triangle
+        context.DrawLine(ThinWhitePen, windowPoints[2], windowPoints[0]);
+
+        // Draw legs (struts, footpads, inner supports, cross braces)
         var legPoints = _engine.Lander.GetLegPoints();
+        // Main struts
         context.DrawLine(ThinWhitePen, legPoints[0], legPoints[1]);
-        context.DrawLine(ThinWhitePen, legPoints[2], legPoints[3]);
+        context.DrawLine(ThinWhitePen, legPoints[4], legPoints[5]);
+        // Footpads
+        context.DrawLine(WhitePen, legPoints[2], legPoints[3]);
+        context.DrawLine(WhitePen, legPoints[6], legPoints[7]);
+        // Inner support struts
+        context.DrawLine(ThinWhitePen, legPoints[8], legPoints[9]);
+        context.DrawLine(ThinWhitePen, legPoints[10], legPoints[11]);
+        // Cross braces
+        context.DrawLine(ThinWhitePen, legPoints[12], legPoints[13]);
+        context.DrawLine(ThinWhitePen, legPoints[14], legPoints[15]);
     }
 
     private void DrawFlameShape(DrawingContext context, Point[] points, IPen pen)
