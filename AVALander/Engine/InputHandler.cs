@@ -12,6 +12,10 @@ public class InputHandler : IDisposable
     private const float StickThreshold = 0.3f;
     private const float TriggerThreshold = 0.3f;
 
+    // Mouse input state
+    private double _mouseWheelDelta;
+    private bool _isLeftMousePressed;
+
     public void OnKeyDown(Key key)
     {
         _pressedKeys.Add(key);
@@ -27,12 +31,38 @@ public class InputHandler : IDisposable
         return _pressedKeys.Contains(key);
     }
 
+    public void OnMouseWheel(double delta)
+    {
+        _mouseWheelDelta += delta;
+    }
+
+    public void OnMouseDown(MouseButton button)
+    {
+        if (button == MouseButton.Left)
+            _isLeftMousePressed = true;
+    }
+
+    public void OnMouseUp(MouseButton button)
+    {
+        if (button == MouseButton.Left)
+            _isLeftMousePressed = false;
+    }
+
     public void Update()
     {
         _controller.Update();
     }
 
+    // Called at end of frame to reset per-frame input
+    public void EndFrame()
+    {
+        _mouseWheelDelta = 0;
+    }
+
     public bool IsControllerConnected => _controller.IsConnected;
+
+    // Mouse wheel rotation (-1 for left, +1 for right, 0 for none)
+    public double MouseWheelRotation => _mouseWheelDelta;
 
     // Rotate left (for lander rotation)
     public bool IsRotatingLeft =>
@@ -53,6 +83,7 @@ public class InputHandler : IDisposable
         IsKeyPressed(Key.W) ||
         IsKeyPressed(Key.Up) ||
         IsKeyPressed(Key.Space) ||
+        _isLeftMousePressed ||
         _controller.ButtonA ||
         _controller.RightTrigger > TriggerThreshold;
 
@@ -60,6 +91,7 @@ public class InputHandler : IDisposable
     public bool IsRestarting =>
         IsKeyPressed(Key.Space) ||
         IsKeyPressed(Key.Enter) ||
+        _isLeftMousePressed ||
         _controller.ButtonA ||
         _controller.ButtonStart;
 

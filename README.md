@@ -16,6 +16,16 @@ This project uses the same audio and controller support libraries as [AVARoids](
 - **Fuel Management** - Limited fuel adds strategic depth
 - **Real-time HUD** - Displays velocity, altitude, fuel, score, and lives
 
+## Screenshots
+
+![AVALander Screenshot 1](Images/AVALANDER1.png)
+
+![AVALander Screenshot 2](Images/AVALANDER2.png)
+
+![AVALander Screenshot 3](Images/AVALANDER3.png)
+
+![AVALander Screenshot 4](Images/AVALANDER4.png)
+
 ## Requirements
 
 - [.NET 9.0 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
@@ -59,6 +69,15 @@ dotnet run --project AVALander
 | Rotate Right | D, Right Arrow      |
 | Pause        | Escape              |
 | Start/Restart| Space, Enter        |
+| Screenshot   | Ctrl+S              |
+
+### Mouse
+
+| Action       | Control             |
+|--------------|---------------------|
+| Thrust       | Left Click          |
+| Rotate       | Mouse Wheel         |
+| Start        | Left Click          |
 
 ### Gamepad
 

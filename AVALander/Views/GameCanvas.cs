@@ -1,7 +1,9 @@
 using System;
+using System.IO;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using AVALander.Engine;
 using AVALander.Models;
@@ -23,6 +25,11 @@ public class GameCanvas : Control
     private double _currentZoom = 1.0;
     private double _targetZoom = 1.0;
     private const double ZoomSmoothSpeed = 3.0;      // How fast zoom transitions
+
+    // Camera tracking settings
+    private double _cameraOffsetX = 0;              // Horizontal camera offset
+    private const double CameraSmoothSpeed = 4.0;   // How fast camera follows ship
+    private const double CameraDeadZone = 0.15;     // Ship can be 15% off center before camera moves
 
     private static readonly IPen WhitePen = new Pen(Brushes.White, 2);
     private static readonly IPen ThinWhitePen = new Pen(Brushes.White, 1);
@@ -65,6 +72,14 @@ public class GameCanvas : Control
 
     protected override void OnKeyDown(Avalonia.Input.KeyEventArgs e)
     {
+        // Screenshot with Ctrl+S
+        if (e.Key == Avalonia.Input.Key.S && e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control))
+        {
+            SaveScreenshot();
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Avalonia.Input.Key.Escape)
         {
             if (_engine.State == GameState.Playing)
@@ -91,9 +106,65 @@ public class GameCanvas : Control
         e.Handled = true;
     }
 
+    private void SaveScreenshot()
+    {
+        try
+        {
+            // Create a render target bitmap matching the control size
+            var pixelSize = new PixelSize((int)Bounds.Width, (int)Bounds.Height);
+            if (pixelSize.Width <= 0 || pixelSize.Height <= 0)
+                return;
+
+            var renderTarget = new RenderTargetBitmap(pixelSize, new Vector(96, 96));
+
+            // Render the control to the bitmap
+            renderTarget.Render(this);
+
+            // Create screenshots directory if it doesn't exist
+            string screenshotsDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
+                "AVALander"
+            );
+            Directory.CreateDirectory(screenshotsDir);
+
+            // Generate filename with timestamp
+            string filename = $"AVALander_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.png";
+            string filepath = Path.Combine(screenshotsDir, filename);
+
+            // Save as PNG
+            renderTarget.Save(filepath);
+
+            Console.WriteLine($"Screenshot saved: {filepath}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to save screenshot: {ex.Message}");
+        }
+    }
+
     protected override void OnKeyUp(Avalonia.Input.KeyEventArgs e)
     {
         _engine.Input.OnKeyUp(e.Key);
+        e.Handled = true;
+    }
+
+    protected override void OnPointerWheelChanged(Avalonia.Input.PointerWheelEventArgs e)
+    {
+        _engine.Input.OnMouseWheel(e.Delta.Y);
+        e.Handled = true;
+    }
+
+    protected override void OnPointerPressed(Avalonia.Input.PointerPressedEventArgs e)
+    {
+        var props = e.GetCurrentPoint(this).Properties;
+        if (props.IsLeftButtonPressed)
+            _engine.Input.OnMouseDown(Avalonia.Input.MouseButton.Left);
+        e.Handled = true;
+    }
+
+    protected override void OnPointerReleased(Avalonia.Input.PointerReleasedEventArgs e)
+    {
+        _engine.Input.OnMouseUp(Avalonia.Input.MouseButton.Left);
         e.Handled = true;
     }
 
@@ -113,8 +184,46 @@ public class GameCanvas : Control
         HandleControllerPause();
 
         _engine.Update(deltaTime);
+        _engine.Input.EndFrame();
         UpdateZoom(deltaTime);
+        UpdateCamera(deltaTime);
         InvalidateVisual();
+    }
+
+    private void UpdateCamera(double deltaTime)
+    {
+        if (_engine.State != GameState.Playing && _engine.State != GameState.Landed && _engine.State != GameState.Crashed)
+        {
+            // Reset camera when not playing
+            _cameraOffsetX = 0;
+            return;
+        }
+
+        // Calculate where the ship appears on screen (accounting for current camera offset)
+        double shipScreenX = _engine.Lander.Position.X - _cameraOffsetX;
+        double screenCenter = Bounds.Width / 2;
+
+        // Define the dead zone where the ship can move freely (center 30% = 15% each side)
+        double deadZoneLeft = screenCenter - Bounds.Width * CameraDeadZone;
+        double deadZoneRight = screenCenter + Bounds.Width * CameraDeadZone;
+
+        // Calculate target camera offset to keep ship in dead zone
+        double targetOffset = _cameraOffsetX;
+
+        if (shipScreenX < deadZoneLeft)
+        {
+            // Ship is too far left, move camera left
+            targetOffset = _engine.Lander.Position.X - deadZoneLeft;
+        }
+        else if (shipScreenX > deadZoneRight)
+        {
+            // Ship is too far right, move camera right
+            targetOffset = _engine.Lander.Position.X - deadZoneRight;
+        }
+
+        // Smoothly interpolate camera position
+        double offsetDiff = targetOffset - _cameraOffsetX;
+        _cameraOffsetX += offsetDiff * CameraSmoothSpeed * deltaTime;
     }
 
     private void UpdateZoom(double deltaTime)
@@ -181,32 +290,41 @@ public class GameCanvas : Control
         // Draw stars (unzoomed - they're far away)
         DrawStars(context);
 
-        // Apply zoom transform for game world elements
+        // Apply camera and zoom transforms for game world elements
+        double centerX = _engine.Lander.Position.X;
+        double centerY = _engine.Lander.Position.Y;
+
+        // Start with camera offset (panning)
+        var cameraTransform = Matrix.CreateTranslation(-_cameraOffsetX, 0);
+
         if (_currentZoom > 1.01)
         {
-            // Calculate zoom center (focused on lander)
-            double centerX = _engine.Lander.Position.X;
-            double centerY = _engine.Lander.Position.Y;
-
-            // Create transform matrix: translate to origin, scale, translate back
-            // This zooms centered on the lander position
-            var transform = Matrix.CreateTranslation(-centerX, -centerY)
+            // Create zoom transform centered on lander position (in camera space)
+            double landerScreenX = centerX - _cameraOffsetX;
+            var zoomTransform = Matrix.CreateTranslation(-landerScreenX, -centerY)
                 * Matrix.CreateScale(_currentZoom, _currentZoom)
-                * Matrix.CreateTranslation(centerX, centerY);
+                * Matrix.CreateTranslation(landerScreenX, centerY);
 
             // Offset to keep lander roughly centered on screen when zoomed
-            double offsetX = (Bounds.Width / 2 - centerX) * (_currentZoom - 1) / _currentZoom;
+            double offsetX = (Bounds.Width / 2 - landerScreenX) * (_currentZoom - 1) / _currentZoom;
             double offsetY = (Bounds.Height / 2 - centerY) * (_currentZoom - 1) / _currentZoom;
-            transform = transform * Matrix.CreateTranslation(offsetX, offsetY);
+            zoomTransform = zoomTransform * Matrix.CreateTranslation(offsetX, offsetY);
 
-            using (context.PushTransform(transform))
+            // Combine camera and zoom transforms
+            var combinedTransform = cameraTransform * zoomTransform;
+
+            using (context.PushTransform(combinedTransform))
             {
                 DrawGameWorld(context);
             }
         }
         else
         {
-            DrawGameWorld(context);
+            // Just apply camera offset
+            using (context.PushTransform(cameraTransform))
+            {
+                DrawGameWorld(context);
+            }
         }
 
         // Draw HUD (unzoomed - always on screen)
@@ -230,10 +348,34 @@ public class GameCanvas : Control
             DrawExplosion(context, explosion);
         }
 
-        // Draw lander (if not crashed)
+        // Draw lander with full scale compensation when zoomed
+        // Lander stays the same size while terrain grows, conveying vastness
         if (!_engine.Lander.HasCrashed)
         {
-            DrawLander(context);
+            if (_currentZoom > 1.01)
+            {
+                // Fully counter the zoom so lander remains at original size
+                double landerScale = 1.0 / _currentZoom;
+
+                // Scale around the feet position (not center) so visual feet align with collision
+                var (leftFoot, rightFoot) = _engine.Lander.GetLandingFeetPositions();
+                double feetX = (leftFoot.X + rightFoot.X) / 2;
+                double feetY = (leftFoot.Y + rightFoot.Y) / 2;
+
+                // Scale around feet position so landing visually matches collision
+                var scaleTransform = Matrix.CreateTranslation(-feetX, -feetY)
+                    * Matrix.CreateScale(landerScale, landerScale)
+                    * Matrix.CreateTranslation(feetX, feetY);
+
+                using (context.PushTransform(scaleTransform))
+                {
+                    DrawLander(context);
+                }
+            }
+            else
+            {
+                DrawLander(context);
+            }
         }
     }
 
@@ -511,10 +653,10 @@ public class GameCanvas : Control
         switch (_engine.State)
         {
             case GameState.Ready:
-                DrawCenteredText(context, typeface, "AVALander", 48, Bounds.Height / 2 - 80);
-                DrawCenteredText(context, typeface, "Press SPACE to Start", 24, Bounds.Height / 2);
-                DrawCenteredText(context, typeface, "W/UP or A to Thrust", 18, Bounds.Height / 2 + 40);
-                DrawCenteredText(context, typeface, "A/D or LEFT/RIGHT to Rotate", 18, Bounds.Height / 2 + 70);
+                DrawCenteredText(context, typeface, "AVALander", 48, Bounds.Height / 2 - 100);
+                DrawCenteredText(context, typeface, "Press SPACE or CLICK to Start", 24, Bounds.Height / 2 - 30);
+                DrawCenteredText(context, typeface, "THRUST: W / UP / SPACE / Left Click", 16, Bounds.Height / 2 + 20);
+                DrawCenteredText(context, typeface, "ROTATE: A/D / LEFT/RIGHT / Mouse Wheel", 16, Bounds.Height / 2 + 50);
                 break;
 
             case GameState.Paused:

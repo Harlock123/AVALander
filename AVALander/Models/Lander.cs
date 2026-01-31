@@ -7,7 +7,7 @@ public class Lander : GameObject
 {
     public const double RotationSpeed = 2.5;
     public const double ThrustPower = 120.0;
-    public const double Gravity = 24.0;
+    public const double Gravity = 16.0;
     public const double MaxFuel = 1000.0;
     public const double FuelConsumption = 50.0;
     public const double MaxSafeLandingSpeed = 40.0;
@@ -44,6 +44,12 @@ public class Lander : GameObject
         Rotation += RotationSpeed * deltaTime;
     }
 
+    public void RotateByAmount(double amount)
+    {
+        if (HasLanded || HasCrashed) return;
+        Rotation += amount;
+    }
+
     public void Thrust(double deltaTime)
     {
         if (HasLanded || HasCrashed || Fuel <= 0) return;
@@ -77,11 +83,8 @@ public class Lander : GameObject
 
         base.Update(deltaTime, screenWidth, screenHeight);
 
-        // Keep within horizontal bounds
-        double x = Position.X;
-        if (x < LanderWidth / 2) x = LanderWidth / 2;
-        if (x > screenWidth - LanderWidth / 2) x = screenWidth - LanderWidth / 2;
-        Position = new Point(x, Position.Y);
+        // No horizontal bounds - mountains handle the boundaries now
+        // The extended terrain allows the ship to fly beyond the original screen
 
         // Check if off screen top (allow it, but not too far)
         if (Position.Y < -100)

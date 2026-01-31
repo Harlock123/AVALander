@@ -36,6 +36,7 @@ public class GameEngine : IDisposable
 
     private double _messageTimer;
     private const double MessageDisplayTime = 2.0;
+    private string? _customCrashMessage;
 
     public double ScreenWidth
     {
@@ -64,7 +65,13 @@ public class GameEngine : IDisposable
         if (!_initialSetupDone && _screenWidthSet && _screenHeightSet)
         {
             _initialSetupDone = true;
-            StartNewGame();
+            // Set up the level but stay in Ready state - wait for spacebar to start
+            Score = 0;
+            Level = 1;
+            Lives = 3;
+            Explosions.Clear();
+            SetupLevel();
+            // State remains Ready until player presses space
         }
     }
 
@@ -101,18 +108,23 @@ public class GameEngine : IDisposable
 
     private void SetupLevel()
     {
+        _customCrashMessage = null;
         Terrain.Generate(ScreenWidth, ScreenHeight, Level);
 
         // Spawn lander at top center with slight random offset
         double startX = ScreenWidth / 2 + (Random.NextDouble() - 0.5) * ScreenWidth * 0.3;
         Lander.Reset(new Point(startX, 50));
 
-        // Give initial horizontal velocity on higher levels
-        if (Level > 1)
-        {
-            double vx = (Random.NextDouble() - 0.5) * 30 * Math.Min(Level, 5);
-            Lander.Velocity = new Vector(vx, 0);
-        }
+        // Always give initial horizontal velocity (90 degrees - purely horizontal)
+        // Randomly choose left or right direction
+        double baseSpeed = 30 + 10 * Math.Min(Level - 1, 4); // Increases with level
+        double direction = Random.Next(2) == 0 ? -1 : 1; // Randomly left (-1) or right (+1)
+        Lander.Velocity = new Vector(baseSpeed * direction, 0);
+
+        // Orient ship in direction of movement (tilted ~70 degrees)
+        // Player must rotate back to vertical for landing
+        double initialRotation = direction * (Math.PI / 2.5); // ~72 degrees in direction of travel
+        Lander.Rotation = initialRotation;
     }
 
     public void NextLevel()
@@ -130,7 +142,7 @@ public class GameEngine : IDisposable
             case GameState.Ready:
                 if (Input.IsRestarting && !_wasRestartingLastFrame)
                 {
-                    StartNewGame();
+                    State = GameState.Playing;
                 }
                 break;
 
@@ -191,6 +203,12 @@ public class GameEngine : IDisposable
         if (Input.IsRotatingRight)
             Lander.RotateRight(deltaTime);
 
+        // Handle mouse wheel rotation (negative = rotate left, positive = rotate right)
+        if (Input.MouseWheelRotation != 0)
+        {
+            Lander.RotateByAmount(-Input.MouseWheelRotation * 0.1);
+        }
+
         if (Input.IsThrusting && Lander.Fuel > 0)
         {
             Lander.Thrust(deltaTime);
@@ -230,6 +248,13 @@ public class GameEngine : IDisposable
     {
         var (leftFoot, rightFoot) = Lander.GetLandingFeetPositions();
 
+        // Check if ship has entered the mountain zone (instant crash)
+        if (Terrain.IsInMountainZone(Lander.Position.X))
+        {
+            CrashLander("HIT MOUNTAIN!");
+            return;
+        }
+
         // Check if either foot is at or below terrain
         if (Terrain.IsCollidingWithTerrain(leftFoot, rightFoot))
         {
@@ -254,17 +279,23 @@ public class GameEngine : IDisposable
             else
             {
                 // Crash!
-                Lander.Crash();
-                Sound.StopThruster();
-                Sound.PlayExplosion();
-
-                Explosions.Add(new Explosion(Lander.Position));
-
-                Lives--;
-                State = GameState.Crashed;
-                _messageTimer = MessageDisplayTime;
+                CrashLander(null);
             }
         }
+    }
+
+    private void CrashLander(string? customMessage)
+    {
+        _customCrashMessage = customMessage;
+        Lander.Crash();
+        Sound.StopThruster();
+        Sound.PlayExplosion();
+
+        Explosions.Add(new Explosion(Lander.Position));
+
+        Lives--;
+        State = GameState.Crashed;
+        _messageTimer = MessageDisplayTime;
     }
 
     public void Pause()
@@ -297,6 +328,8 @@ public class GameEngine : IDisposable
     {
         if (State == GameState.Crashed)
         {
+            if (_customCrashMessage != null)
+                return _customCrashMessage;
             if (!Lander.IsSafeLandingSpeed())
                 return "TOO FAST!";
             if (!Lander.IsSafeLandingAngle())
