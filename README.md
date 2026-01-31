@@ -127,6 +127,11 @@ Land your lunar module safely on the designated landing pads (shown in green) to
 AVALander/
 ├── AVALander.sln
 ├── README.md
+├── Images/
+│   ├── AVALANDER1.png         # Screenshot 1
+│   ├── AVALANDER2.png         # Screenshot 2
+│   ├── AVALANDER3.png         # Screenshot 3
+│   └── AVALANDER4.png         # Screenshot 4
 └── AVALander/
     ├── AVALander.csproj
     ├── Program.cs
