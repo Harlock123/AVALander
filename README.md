@@ -11,6 +11,7 @@ This project uses the same audio and controller support libraries as [AVARoids](
 - **Gamepad Support** - Full SDL2 controller support (Xbox, PlayStation, Nintendo Switch Pro, etc.)
 - **Audio** - Thruster sounds and explosion effects via NetCoreAudio
 - **Progressive Difficulty** - Terrain becomes more challenging with each level
+- **Asteroid Hazards** - Dodge incoming asteroids that create craters on impact
 - **Physics Simulation** - Realistic gravity, thrust, and rotation mechanics
 - **Multiple Landing Pads** - Score multipliers (1X to 5X) based on pad difficulty
 - **Fuel Management** - Limited fuel adds strategic depth
@@ -101,6 +102,13 @@ Land your lunar module safely on the designated landing pads (shown in green) to
 - **Angle**: Lander must be within 15° of vertical
 - **Position**: Both landing feet must be on a landing pad
 
+### Asteroid Hazards
+Asteroids periodically fly across the screen, adding danger to your descent:
+- **Collision**: Direct contact with an asteroid destroys your lander
+- **Terrain Impact**: Asteroids striking the ground create craters that permanently alter the terrain
+- **Debris**: When asteroids hit the ground, ejecta particles fly upward and can damage your lander
+- **Spawn Rate**: Asteroids spawn every 8 seconds initially, increasing to every 3 seconds at higher levels
+
 ### Scoring
 - Base landing score: **50 points × pad multiplier** (1X to 5X)
 - Fuel bonus: **1 point per 10 fuel remaining**
@@ -120,6 +128,9 @@ Land your lunar module safely on the designated landing pads (shown in green) to
 - Kill horizontal velocity before attempting to land
 - Watch the velocity indicators - green means safe landing speed
 - Higher levels start with initial horizontal drift
+- Keep an eye out for incoming asteroids and avoid their flight path
+- After an asteroid impact, watch for upward-flying debris before descending
+- Craters from asteroid impacts can eliminate landing pads - land quickly!
 
 ## Project Structure
 
@@ -140,11 +151,14 @@ AVALander/
     ├── MainWindow.axaml
     ├── MainWindow.axaml.cs
     ├── Engine/
+    │   ├── AsteroidSpawner.cs     # Asteroid spawn timing & positioning
     │   ├── ControllerManager.cs   # SDL2 gamepad input
     │   ├── GameEngine.cs          # Core game logic
     │   ├── InputHandler.cs        # Keyboard + controller abstraction
     │   └── SoundManager.cs        # Audio playback
     ├── Models/
+    │   ├── Asteroid.cs            # Asteroid hazard with rotation
+    │   ├── AsteroidExplosion.cs   # Impact explosion with ejecta
     │   ├── Explosion.cs           # Crash explosion effect
     │   ├── GameObject.cs          # Base game object class
     │   ├── Lander.cs              # Lunar module physics & rendering
