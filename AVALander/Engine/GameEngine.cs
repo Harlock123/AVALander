@@ -22,6 +22,10 @@ public class GameEngine : IDisposable
     public Lander Lander { get; private set; }
     public Terrain Terrain { get; } = new();
     public List<Explosion> Explosions { get; } = new();
+    public List<Asteroid> Asteroids { get; } = new();
+    public List<AsteroidExplosion> AsteroidExplosions { get; } = new();
+
+    private readonly AsteroidSpawner _asteroidSpawner = new();
 
     public int Score { get; private set; }
     public int Level { get; private set; }
@@ -101,6 +105,8 @@ public class GameEngine : IDisposable
         Level = 1;
         Lives = 3;
         Explosions.Clear();
+        Asteroids.Clear();
+        AsteroidExplosions.Clear();
 
         SetupLevel();
         State = GameState.Playing;
@@ -110,6 +116,11 @@ public class GameEngine : IDisposable
     {
         _customCrashMessage = null;
         Terrain.Generate(ScreenWidth, ScreenHeight, Level);
+
+        // Clear asteroids for new level
+        Asteroids.Clear();
+        AsteroidExplosions.Clear();
+        _asteroidSpawner.Reset(Level);
 
         // Spawn lander at top center with slight random offset
         double startX = ScreenWidth / 2 + (Random.NextDouble() - 0.5) * ScreenWidth * 0.3;
@@ -157,6 +168,7 @@ public class GameEngine : IDisposable
             case GameState.Landed:
                 _messageTimer -= deltaTime;
                 UpdateExplosions(deltaTime);
+                UpdateAsteroidExplosions(deltaTime);
                 if (_messageTimer <= 0)
                 {
                     NextLevel();
@@ -166,6 +178,7 @@ public class GameEngine : IDisposable
             case GameState.Crashed:
                 _messageTimer -= deltaTime;
                 UpdateExplosions(deltaTime);
+                UpdateAsteroidExplosions(deltaTime);
                 if (_messageTimer <= 0)
                 {
                     if (Lives > 0)
@@ -182,6 +195,7 @@ public class GameEngine : IDisposable
 
             case GameState.GameOver:
                 UpdateExplosions(deltaTime);
+                UpdateAsteroidExplosions(deltaTime);
                 if (Input.IsRestarting && !_wasRestartingLastFrame)
                 {
                     StartNewGame();
@@ -227,11 +241,74 @@ public class GameEngine : IDisposable
         // Update lander (thrust state persists through this for rendering)
         Lander.Update(deltaTime, ScreenWidth, ScreenHeight);
 
+        // Update asteroids
+        UpdateAsteroids(deltaTime);
+
         // Update explosions
         UpdateExplosions(deltaTime);
 
         // Check collision with terrain
         CheckCollision();
+    }
+
+    private void UpdateAsteroids(double deltaTime)
+    {
+        // Spawn new asteroids
+        var newAsteroid = _asteroidSpawner.Update(deltaTime, ScreenWidth, ScreenHeight);
+        if (newAsteroid != null)
+        {
+            Asteroids.Add(newAsteroid);
+        }
+
+        // Update existing asteroids
+        foreach (var asteroid in Asteroids)
+        {
+            asteroid.Update(deltaTime, ScreenWidth, ScreenHeight);
+
+            // Check asteroid vs terrain collision
+            double terrainHeight = Terrain.GetHeightAt(asteroid.Position.X);
+            if (asteroid.Position.Y + asteroid.Radius >= terrainHeight)
+            {
+                // Asteroid hit terrain - create crater and explosion
+                asteroid.IsAlive = false;
+
+                // Create crater (radius = 2x asteroid radius)
+                double craterRadius = asteroid.Radius * 2;
+                double craterDepth = asteroid.Radius * 0.8;
+                Terrain.CreateCrater(asteroid.Position.X, craterRadius, craterDepth);
+
+                // Create explosion at impact point
+                var impactPoint = new Point(asteroid.Position.X, terrainHeight);
+                AsteroidExplosions.Add(new AsteroidExplosion(impactPoint, asteroid.Radius));
+                Sound.PlayExplosion();
+            }
+            // Check asteroid vs lander collision
+            else if (asteroid.CollidesWith(Lander))
+            {
+                asteroid.IsAlive = false;
+                CrashLander("HIT BY ASTEROID!");
+                return;
+            }
+        }
+
+        // Remove dead asteroids
+        Asteroids.RemoveAll(a => !a.IsAlive);
+
+        // Update asteroid explosions and check ejecta vs lander
+        foreach (var explosion in AsteroidExplosions)
+        {
+            explosion.Update(deltaTime);
+
+            // Check if ejecta hits lander
+            if (State == GameState.Playing && explosion.IsEjectaDangerousTo(Lander.Position, Lander.Radius))
+            {
+                CrashLander("HIT BY DEBRIS!");
+                return;
+            }
+        }
+
+        // Remove finished asteroid explosions
+        AsteroidExplosions.RemoveAll(e => e.IsFinished);
     }
 
     private void UpdateExplosions(double deltaTime)
@@ -242,6 +319,16 @@ public class GameEngine : IDisposable
         }
 
         Explosions.RemoveAll(e => e.IsFinished);
+    }
+
+    private void UpdateAsteroidExplosions(double deltaTime)
+    {
+        foreach (var explosion in AsteroidExplosions)
+        {
+            explosion.Update(deltaTime);
+        }
+
+        AsteroidExplosions.RemoveAll(e => e.IsFinished);
     }
 
     private void CheckCollision()

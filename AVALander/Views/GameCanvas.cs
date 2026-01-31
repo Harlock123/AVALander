@@ -36,6 +36,7 @@ public class GameCanvas : Control
     private static readonly IPen GreenPen = new Pen(Brushes.LimeGreen, 3);
     private static readonly IPen YellowPen = new Pen(Brushes.Yellow, 2);
     private static readonly IPen RedPen = new Pen(Brushes.Red, 2);
+    private static readonly IPen GrayPen = new Pen(Brushes.Gray, 2);
     private static readonly IBrush WhiteBrush = Brushes.White;
     private static readonly IBrush GreenBrush = Brushes.LimeGreen;
     private static readonly IBrush YellowBrush = Brushes.Yellow;
@@ -342,6 +343,18 @@ public class GameCanvas : Control
         // Draw landing pads
         DrawLandingPads(context);
 
+        // Draw asteroids
+        foreach (var asteroid in _engine.Asteroids)
+        {
+            DrawAsteroid(context, asteroid);
+        }
+
+        // Draw asteroid explosions
+        foreach (var explosion in _engine.AsteroidExplosions)
+        {
+            DrawAsteroidExplosion(context, explosion);
+        }
+
         // Draw explosions
         foreach (var explosion in _engine.Explosions)
         {
@@ -507,6 +520,47 @@ public class GameCanvas : Control
         foreach (var (start, end) in explosion.GetDebrisLines())
         {
             context.DrawLine(pen, start, end);
+        }
+    }
+
+    private void DrawAsteroid(DrawingContext context, Models.Asteroid asteroid)
+    {
+        var points = asteroid.GetPolygonPoints();
+        DrawPolygon(context, points, GrayPen);
+    }
+
+    private void DrawAsteroidExplosion(DrawingContext context, Models.AsteroidExplosion explosion)
+    {
+        double opacity = explosion.GetOpacity();
+
+        // Draw ground particles (brownish/orange)
+        foreach (var particle in explosion.GetParticles())
+        {
+            double particleOpacity = particle.GetOpacity();
+            var particleColor = Color.FromArgb((byte)(255 * particleOpacity), 180, 120, 60);
+            var brush = new SolidColorBrush(particleColor);
+            context.DrawEllipse(brush, null, particle.Position, particle.Size, particle.Size);
+        }
+
+        // Draw ejecta particles (brighter - dangerous)
+        foreach (var ejecta in explosion.GetEjecta())
+        {
+            double ejectaOpacity = ejecta.GetOpacity();
+            // Brighter color for dangerous ejecta, dimmer when falling
+            byte r = ejecta.IsDangerous ? (byte)255 : (byte)200;
+            byte g = ejecta.IsDangerous ? (byte)220 : (byte)150;
+            byte b = ejecta.IsDangerous ? (byte)100 : (byte)80;
+            var ejectaColor = Color.FromArgb((byte)(255 * ejectaOpacity), r, g, b);
+            var brush = new SolidColorBrush(ejectaColor);
+            context.DrawEllipse(brush, null, ejecta.Position, ejecta.Size, ejecta.Size);
+        }
+
+        // Draw debris lines (rock fragments)
+        var debrisColor = Color.FromArgb((byte)(255 * opacity), 150, 150, 150);
+        var debrisPen = new Pen(new SolidColorBrush(debrisColor), 1.5);
+        foreach (var (start, end, _) in explosion.GetDebrisLines())
+        {
+            context.DrawLine(debrisPen, start, end);
         }
     }
 

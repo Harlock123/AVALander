@@ -325,4 +325,36 @@ public class Terrain
     {
         return x <= LeftMountainX || x >= RightMountainX;
     }
+
+    /// <summary>
+    /// Create a crater in the terrain at the specified position
+    /// </summary>
+    /// <param name="impactX">X coordinate of impact</param>
+    /// <param name="craterRadius">Radius of the crater</param>
+    /// <param name="craterDepth">Depth of the crater at center</param>
+    public void CreateCrater(double impactX, double craterRadius, double craterDepth)
+    {
+        if (_points.Count < 2) return;
+
+        // The last 2 points are polygon closing points - skip them
+        int terrainPointCount = _points.Count - 2;
+
+        for (int i = 0; i < terrainPointCount; i++)
+        {
+            var point = _points[i];
+            double dx = point.X - impactX;
+
+            // Check if point is within crater radius
+            if (Math.Abs(dx) <= craterRadius)
+            {
+                // Calculate depression using cosine falloff for smooth bowl shape
+                double normalizedDistance = Math.Abs(dx) / craterRadius;
+                double falloff = (1 + Math.Cos(normalizedDistance * Math.PI)) / 2; // Smooth 0-1 falloff
+                double depression = craterDepth * falloff;
+
+                // Push the terrain point down (increase Y)
+                _points[i] = new Point(point.X, point.Y + depression);
+            }
+        }
+    }
 }
