@@ -31,11 +31,22 @@ This project uses the same audio and controller support libraries as [AVARoids](
 
 - [.NET 9.0 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
 - SDL2 libraries (for controller support)
+- ALSA's `aplay` (Linux only) - NetCoreAudio shells out to it to play the `.wav`
+  sounds. Without it the game runs but is completely silent; see
+  [No audio on Linux](#no-audio-on-linux).
 
 ### Linux (Debian/Ubuntu)
 ```bash
-sudo apt install libsdl2-2.0-0
+sudo apt install libsdl2-2.0-0 alsa-utils
 ```
+
+### Linux (Arch / Omarchy)
+```bash
+sudo pacman -S --needed sdl2-compat alsa-utils
+```
+
+`alsa-utils` is not part of a minimal Arch or Omarchy install, and current Arch
+ships SDL2 as `sdl2-compat` rather than `sdl2`.
 
 ### macOS (Homebrew)
 ```bash
@@ -58,6 +69,61 @@ dotnet build
 # Run
 dotnet run --project AVALander
 ```
+
+## Troubleshooting
+
+### No audio on Linux
+
+If the game runs but produces no sound at all - and changing the output device in
+your sound settings makes no difference - the cause is almost certainly a missing
+`aplay`.
+
+NetCoreAudio does not use an audio API. On Linux it shells out to a command-line
+player, spawning one process per sound:
+
+| Platform       | Command it runs |
+|----------------|-----------------|
+| Linux (`.wav`) | `aplay -q`      |
+| Linux (`.mp3`) | `mpg123 -q`     |
+| macOS          | `afplay`        |
+
+Every AVALander sound is a `.wav`, so all audio goes through `aplay`, which ships
+in `alsa-utils`. On a minimal Arch or Omarchy system that package is absent even
+though the rest of the audio stack (PipeWire, `paplay`, `mpg123`, `ffplay`) is
+present and working - so every other application has sound and only this game does
+not.
+
+The silence rather than an error is by design in `SoundManager`:
+
+```csharp
+catch
+{
+    // Silently ignore playback errors
+}
+```
+
+Check for the binary and install it:
+
+```bash
+command -v aplay || sudo pacman -S --needed alsa-utils   # Arch / Omarchy
+command -v aplay || sudo apt install alsa-utils          # Debian / Ubuntu
+```
+
+Then verify playback independently of the game:
+
+```bash
+aplay -q AVALander/Sounds/Landing.wav && echo "audio OK"
+```
+
+**Why selecting a different output device never helps.** The failure happens
+before any audio server is involved: the player process does not exist to be
+launched, so no sink, card or device choice can change the outcome. Once `aplay`
+is installed, ALSA routes into PipeWire through `pipewire-alsa` and the sound
+follows whatever sink you have selected - including a virtual one, such as a VM
+guest forwarding audio to its host.
+
+This is not specific to a VM or to Omarchy; it is simply the most common place to
+meet a Linux install that has no `alsa-utils`.
 
 ## Controls
 
