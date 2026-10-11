@@ -27,6 +27,42 @@ This project uses the same audio and controller support libraries as [AVARoids](
 
 ![AVALander Screenshot 4](Images/AVALANDER4.png)
 
+## Download and run
+
+Ready-to-run builds for Windows, macOS and Linux, on both Intel/AMD and ARM, are on the
+[Releases page](https://github.com/Harlock123/AVALander/releases). **Latest build** is rebuilt on
+every push to `main`. Each download is one self-contained executable: no .NET install is
+needed.
+
+```bash
+tar -xzf AVALander-linux-arm64.tar.gz      # or linux-x64, linux-arm, osx-arm64, osx-x64
+./AVALander
+```
+
+On Windows, unzip `AVALander-win-x64.zip` (or `-win-arm64`) and run `AVALander.exe`. On macOS, if
+Gatekeeper refuses to open it, run `xattr -d com.apple.quarantine AVALander` once.
+
+### Linux: sound and gamepads
+
+- **Sound** needs `aplay`, from the `alsa-utils` package. Without it the game runs but is
+  silent. Minimal installs (Arch, Omarchy, some Raspberry Pi images) don't include it:
+
+  ```bash
+  sudo apt install alsa-utils             # Debian / Ubuntu / Raspberry Pi OS
+  sudo pacman -S --needed alsa-utils      # Arch / Omarchy
+  ```
+
+- **Gamepads** use SDL2. It is bundled for Windows, macOS and Intel/AMD Linux, but **ARM Linux builds need it
+  installed**. Without it the keyboard still works; only the controller does not:
+
+  ```bash
+  sudo apt install libsdl2-dev            # Debian / Ubuntu / Raspberry Pi OS
+  sudo pacman -S --needed sdl2-compat     # Arch / Omarchy
+  ```
+
+  On Debian-based systems it has to be `libsdl2-dev`: the game looks for `libSDL2.so`, which
+  the runtime-only `libsdl2-2.0-0` package doesn't provide.
+
 ## Requirements
 
 - [.NET 9.0 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
@@ -37,7 +73,7 @@ This project uses the same audio and controller support libraries as [AVARoids](
 
 ### Linux (Debian/Ubuntu)
 ```bash
-sudo apt install libsdl2-2.0-0 alsa-utils
+sudo apt install libsdl2-dev alsa-utils
 ```
 
 ### Linux (Arch / Omarchy)
