@@ -29,12 +29,20 @@ public class ControllerManager : IDisposable
     public float LeftStickX { get; private set; }
     public float LeftStickY { get; private set; }
 
+    /// <summary>SDL is not safe to start, poll or stop from two threads at once (the tests make many handlers in parallel).</summary>
+    private static readonly System.Threading.Lock Sdl = new();
+
     public ControllerManager()
     {
         Initialize();
     }
 
     private void Initialize()
+    {
+        lock (Sdl) InitializeLocked();
+    }
+
+    private void InitializeLocked()
     {
         if (_initialized) return;
 
@@ -75,6 +83,11 @@ public class ControllerManager : IDisposable
     }
 
     public void Update()
+    {
+        lock (Sdl) UpdateLocked();
+    }
+
+    private void UpdateLocked()
     {
         if (!_initialized) return;
 
@@ -143,6 +156,11 @@ public class ControllerManager : IDisposable
     }
 
     public void Dispose()
+    {
+        lock (Sdl) DisposeLocked();
+    }
+
+    private void DisposeLocked()
     {
         if (_disposed) return;
         _disposed = true;
